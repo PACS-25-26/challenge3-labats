@@ -2,15 +2,55 @@
 #include <cmath>
 #include <vector>
 #include <array>
+#include <functional>
+#include <iostream>
 
 namespace jacobisolver{
 
-    using Point = std::array<double, 2>;
-    using Grid = std::vector<Point>;
+    static const int ndim = 2;
+    using Point = std::array<double, ndim>;
+    
+    class Grid {
+    private:
+        const unsigned int n;  // n_points for dimension, so total is n^2
+        const double h;        // spacing
+        std::vector<std::vector<double>> U;  // numerical solution matrix
+        
+    public:
+        explicit Grid(unsigned int n_points) : n(n_points), h(1.0/(n_points-1)),  
+                                            U(n_points, std::vector<double>(n_points, 0.0)) {};
+
+        double& operator()(unsigned int i, unsigned int j);
+        double& operator()(unsigned int i);
+        const double& operator()(unsigned int i, unsigned int j) const;
+        const double& operator()(unsigned int k) const;
+
+        const Point get_coordinate(unsigned int i, unsigned int j) const;
+        const Point get_coordinate(unsigned int k) const;
+
+        const double geth() const;
+        const std::vector<std::vector<double>> getu() const;
+
+};
 
     class JacobiSolver{
         private:
+        unsigned int n;
         Grid grid;
+        std::function<double(const Point&)> f;
+        std::function<double(const Point&)> bordercondition;
+        static constexpr double tolerance = 1e-4;
+        static constexpr unsigned int maxit = 2000;
+
+        public:
+        explicit JacobiSolver(unsigned int np, std::function<double(const Point&)> func,
+                                std::function<double(const Point&)> bc) : n(np), grid(np), 
+                                f(func), bordercondition(bc) {};
+
+        void set_boundary_cond();
+
+        std::vector<std::vector<double>> solve();
+
 
     };
 
