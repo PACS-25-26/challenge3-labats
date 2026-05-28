@@ -1,0 +1,23 @@
+#!/bin/bash
+#PBS -N jacobi_scalability
+#PBS -q cpu
+#PBS -l select=1:ncpus=4:mpiprocs=4
+#PBS -l walltime=00:30:00
+#PBS -j oe
+
+cd $PBS_O_WORKDIR
+
+OUTPUT_CSV="results.csv"
+echo "GridSize,Ranks,Time_s,L2_Error" > $OUTPUT_CSV #column names
+
+N_VALUES=(16 32 64 128 256)
+
+RANKS=(1 2 4)
+
+for n in "${N_VALUES[@]}"; do
+    for r in "${RANKS[@]}"; do
+
+        mpirun -np $r ../jacobi $n >> $OUTPUT_CSV
+        
+    done
+done

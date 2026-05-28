@@ -5,6 +5,8 @@
 #include <functional>
 #include <iostream>
 #include <mpi.h>
+#include <Eigen/Sparse>
+#include <Eigen/SparseLU>
 
 namespace jacobisolver{
 
@@ -58,6 +60,8 @@ namespace jacobisolver{
         void set_boundary_cond();
 
         std::vector<std::vector<double>> solve();
+
+        std::vector<std::vector<double>> solve_schwarz();
 
     };
 

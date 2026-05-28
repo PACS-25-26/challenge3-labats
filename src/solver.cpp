@@ -97,26 +97,20 @@ namespace jacobisolver{
             if (last_row != n-1 && first_row != 0){
                 //indices of local_uk go from 0 to local_size - 1
                 //the last index of local_uk is lastrow - firstrow
-                //std::cout<<"I'm rank "<<rank<<" and I'm entering the first block"<<std::endl;
                 MPI_Sendrecv(local_uk[0].data(), n, MPI_DOUBLE, 
                             rank - 1, 0, followingrow.data(), n, MPI_DOUBLE, rank + 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                 MPI_Sendrecv(local_uk[last_row - first_row].data(), n, MPI_DOUBLE, 
                             rank + 1, 0, previousrow.data(), n, MPI_DOUBLE, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                //std::cout<<"I'm rank "<<rank<<" and I'm exiting the first block"<<std::endl;
             }
             if (first_row == 0 && rank + 1 < size){     //we need to check that a later rank does exist
-                //std::cout<<"I'm rank "<<rank<<" and I'm entering the second block"<<std::endl;
                 MPI_Sendrecv(local_uk[last_row - first_row].data(), n, MPI_DOUBLE, 
                             rank + 1, 0, followingrow.data(), n, MPI_DOUBLE, rank + 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                //std::cout<<"I'm rank "<<rank<<" and I'm exiting the second block"<<std::endl;
             }
             if (last_row == n - 1 && rank - 1 >= 0){    //we need to check that a previous rank does exist
-                //std::cout<<"I'm rank "<<rank<<" and I'm entering the third block"<<std::endl;
                 MPI_Sendrecv(local_uk[0].data(), n, MPI_DOUBLE, 
                             rank - 1, 0, previousrow.data(), n, MPI_DOUBLE, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-                //std::cout<<"I'm rank "<<rank<<" and I'm exiting the third block"<<std::endl;
             }
-
+            
             if (first_row != last_row){
                 #pragma omp parallel for reduction(+: difference)
                 for (auto j = 1; j < n-1; ++j){
@@ -216,7 +210,169 @@ namespace jacobisolver{
             file << i << std::endl;
 
         file.close();
-        std::cout<<"Vtk file created successfully!"<<std::endl;
+
+    }
+
+    std::vector<std::vector<double>> JacobiSolver::solve_schwarz(){
+
+        int rank,size;
+        MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+        MPI_Comm_size(MPI_COMM_WORLD, &size);
+
+        set_boundary_cond();
+
+        int local_converged = 0, global_converged = 0;
+        unsigned int k = 0;
+        unsigned int local_size = last_row - first_row + 1;
+        double hsquared = grid.geth()*grid.geth();
+
+        std::vector<std::vector<double>> local_uk = grid.getu();
+
+        //the jacobi algebric formulation is -(u(i-1,j) + u(i+1,j) + u(i,j-1) + u(i,j+1) - 4*u(i,j)) / h^2 = f(i,j)
+        //when k = n*i + j, it becomes 4*u_k - u_(k-1) - u_(k+1) - u_(k-n) - u_(k+n) = h^2 * f_k
+        //so the matrix A is sparse and each row has only 5 entries
+        std::vector<Eigen::Triplet<double>> triplets;
+        Eigen::SparseMatrix<double> A(local_size*n, local_size*n);  //the first and last column are fixed (Dirichlet)
+        
+        for (auto i = 1; i < local_size-1; ++i){    //first and last row require more attention
+            for (auto j = 1; j < n-1; ++j){
+
+                auto k = n * i + j;                             //we are on row k of the matrix, concering u_k
+                triplets.push_back({k, k, 4});                  //4*u_k
+                triplets.push_back({k, k-1, -1});               //-u_(k-1)
+                triplets.push_back({k, k+1, -1});               //-u_(k+1)
+                triplets.push_back({k, k-n, -1});               //-u_(k-n)
+                triplets.push_back({k, k+n, -1});               //-u_(k+n)
+
+            }
+        }
+        if (first_row != 0){        //the equations for the elements on the first row become 4*u_k - u_(k-1) - u_(k+1) - u_(k+n) = h^2 * f_k + u_(k-n)
+                                    //where u_(k-n) is known and comes from the previousrow, so it is not in local_uk
+            for (auto j = 1; j < n-1; ++j){     //i = 0, so k = j
+
+                triplets.push_back({j, j, 4});                  //4*u_k
+                triplets.push_back({j, j-1, -1});               //-u_(k-1)
+                triplets.push_back({j, j+1, -1});               //-u_(k+1)
+                triplets.push_back({j, j+n, -1});               //-u_(k+n)
+
+            }
+        }
+        if (last_row != n-1){       //the equations for the last row become 4*u_k - u_(k-1) - u_(k+1) - u_(k-n) = h^2 * f_k + u_(k+n)
+                                    //where u_(k+n) is known and comes from the followingrow, so it is not in local_uk
+            for (auto j = 1; j < n-1; ++j){     //i = local_size - 1
+
+                auto k = n * (local_size - 1) + j;
+                triplets.push_back({k, k, 4});                  //4*u_k
+                triplets.push_back({k, k-1, -1});               //-u_(k-1)
+                triplets.push_back({k, k+1, -1});               //-u_(k+1)
+                triplets.push_back({k, k-n, -1});               //-u_(k-n)
+
+            }
+        }
+
+        Eigen::VectorXd f_local(local_size*n);      //forcing term
+
+        for (auto i = 0; i < local_size; ++i){  //the border conditions must not change, so for j = 0, n-1 we must have 
+                                                //the identity row: u_k = f_bc. I also fix f_k = f_bc
+
+            auto k0 = n * i;
+            auto kf = n * i + n - 1;
+            triplets.push_back({k0, k0, 1});
+            triplets.push_back({kf, kf, 1});
+            f_local(k0) = local_uk[i][0];
+            f_local(kf) = local_uk[i][n-1];
+
+        }
+
+        A.setFromTriplets(triplets.begin(), triplets.end());
+
+        Eigen::SparseLU<Eigen::SparseMatrix<double>> lu_solver;         //Eigen LU computation. Only needed once for A, so out of while
+        lu_solver.compute(A);
+
+
+        while (!global_converged && k < maxit){
+
+            k++;
+            local_converged = 0;
+            double difference = 0.;
+            std::vector<double> followingrow(n, 0.);
+            std::vector<double> previousrow(n, 0.);
+
+            if (last_row != n-1 && first_row != 0){
+                //indices of local_uk go from 0 to local_size - 1
+                //the last index of local_uk is lastrow - firstrow
+                MPI_Sendrecv(local_uk[0].data(), n, MPI_DOUBLE, 
+                            rank - 1, 0, followingrow.data(), n, MPI_DOUBLE, rank + 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+                MPI_Sendrecv(local_uk[last_row - first_row].data(), n, MPI_DOUBLE, 
+                            rank + 1, 0, previousrow.data(), n, MPI_DOUBLE, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            }
+            if (first_row == 0 && rank + 1 < size){     //we need to check that a later rank does exist
+                MPI_Sendrecv(local_uk[last_row - first_row].data(), n, MPI_DOUBLE, 
+                            rank + 1, 0, followingrow.data(), n, MPI_DOUBLE, rank + 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            }
+            if (last_row == n - 1 && rank - 1 >= 0){    //we need to check that a previous rank does exist
+                MPI_Sendrecv(local_uk[0].data(), n, MPI_DOUBLE, 
+                            rank - 1, 0, previousrow.data(), n, MPI_DOUBLE, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+            }
+
+            //Assembly of f_local
+            #pragma omp parallel for
+            for (auto i = 1; i < local_size-1; ++i){    //first and last row require more attention
+                for (auto j = 1; j < n-1; ++j){
+
+                    auto k = n * i + j;                             //we are on row k of the matrix, concering u_k
+                    f_local(k) = hsquared * f(grid.get_coordinate(first_row + i, j));
+
+                }
+            }
+            if (first_row != 0){        //the equations for the elements on the first row become 4*u_k - u_(k-1) - u_(k+1) - u_(k+n) = h^2 * f_k + u_(k-n)
+                                        //where u_(k-n) is known and comes from the previousrow, so it is not in local_uk
+                #pragma omp parallel for
+                for (auto j = 1; j < n-1; ++j){    //i = 0, so k = j                           
+                    f_local(j) = hsquared * f(grid.get_coordinate(first_row, j)) + previousrow[j];
+                }
+
+            }
+            if (last_row != n-1){       //the equations for the last row become 4*u_k - u_(k-1) - u_(k+1) - u_(k-n) = h^2 * f_k + u_(k+n)
+                                        //where u_(k+n) is known and comes from the followingrow, so it is not in local_uk
+                #pragma omp parallel for
+                for (auto j = 1; j < n-1; ++j){     //i = local_size - 1
+
+                    auto k = n * (local_size - 1) + j;                             
+                    f_local(k) = hsquared * f(grid.get_coordinate(last_row, j)) + followingrow[j];
+
+                }
+            }
+
+            Eigen::VectorXd u_local = lu_solver.solve(f_local);
+
+            #pragma omp parallel for
+            for (auto i = 0; i < local_size; ++i)
+                for (auto j = 0; j < n; ++j)
+                    grid(first_row + i, j) = u_local(i*n + j);      //updating U with u_local
+
+            #pragma omp parallel for reduction(+:difference)
+            for (auto i = 0; i < local_size; ++i)
+                for (auto j = 0; j < n; ++j)
+                    difference += (u_local(i*n + j) - local_uk[i][j]) * (u_local(i*n + j) - local_uk[i][j]);
+
+            double increment = std::sqrt(grid.geth() * difference);
+            if (increment < tolerance)
+                local_converged = 1;
+            
+            MPI_Allreduce(&local_converged, &global_converged, 1, MPI_INT, MPI_LAND, MPI_COMM_WORLD);
+
+            if (global_converged && rank == 0)
+                std::cout<<"Jacobi converged in "<<k<<" iterations!"<<std::endl;
+
+            local_uk = grid.getu();
+
+        }
+
+        if (!global_converged && rank == 0)
+            std::cout<<"Jacobi did not converge."<<std::endl;
+
+        return local_uk;
 
     }
 

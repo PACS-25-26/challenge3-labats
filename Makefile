@@ -1,6 +1,6 @@
 CXX = mpic++
 
-CXXFLAGS = -std=c++17 -O3 -Wall -fopenmp -Iinclude
+CXXFLAGS = -std=c++17 -O3 -Wall -fopenmp -Iinclude -I/usr/include/eigen3
 
 SRC_DIR = src
 
