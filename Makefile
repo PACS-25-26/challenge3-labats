@@ -6,7 +6,7 @@ SRC_DIR = src
 
 TARGET = jacobi
 
-SRCS = $(SRC_DIR)/main.cpp $(SRC_DIR)/solver.cpp $(SRC_DIR)/vtk_export.cpp
+SRCS = $(SRC_DIR)/main.cpp $(SRC_DIR)/solver.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 

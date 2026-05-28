@@ -1,4 +1,6 @@
 #include "solver.hpp"
+#include <omp.h>
+#include <fstream>
 
 namespace jacobisolver{
 
@@ -91,6 +93,7 @@ namespace jacobisolver{
             double difference = 0.;
             std::vector<double> followingrow(n, 0.);
             std::vector<double> previousrow(n, 0.);
+
             if (last_row != n-1 && first_row != 0){
                 //indices of local_uk go from 0 to local_size - 1
                 //the last index of local_uk is lastrow - firstrow
@@ -100,7 +103,6 @@ namespace jacobisolver{
                 MPI_Sendrecv(local_uk[last_row - first_row].data(), n, MPI_DOUBLE, 
                             rank + 1, 0, previousrow.data(), n, MPI_DOUBLE, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
                 //std::cout<<"I'm rank "<<rank<<" and I'm exiting the first block"<<std::endl;
-
             }
             if (first_row == 0 && rank + 1 < size){     //we need to check that a later rank does exist
                 //std::cout<<"I'm rank "<<rank<<" and I'm entering the second block"<<std::endl;
@@ -116,6 +118,7 @@ namespace jacobisolver{
             }
 
             if (first_row != last_row){
+                #pragma omp parallel for reduction(+: difference)
                 for (auto j = 1; j < n-1; ++j){
                     if (first_row != 0){
                     
@@ -141,6 +144,7 @@ namespace jacobisolver{
                     }
                 }
             }
+            #pragma omp parallel for reduction(+:difference)
             for (auto i = first_row + 1; i < last_row; ++i){
                for (auto j = 1; j < n-1; ++j){
 
@@ -156,6 +160,7 @@ namespace jacobisolver{
 
             if (first_row == last_row){
                 if (first_row != 0 && last_row != n-1){
+                    #pragma omp parallel for reduction(+:difference)
                     for (auto j = 1; j < n-1; ++j){
 
                         double sum = 0.;
@@ -185,6 +190,33 @@ namespace jacobisolver{
             std::cout<<"Jacobi did not converge."<<std::endl;
 
         return local_uk;
+
+    }
+
+    void export_vtk(unsigned int n, std::vector<double> solution, double h){
+
+        std::ofstream file("jacobi_solution.vtk");
+
+        // vtk header has always the same format
+        file << "# vtk DataFile Version 3.0\n";
+        file << "Laplace Solution with Jacobi\n";
+        file << "ASCII\n";
+        file << "DATASET STRUCTURED_POINTS\n";
+        file << "DIMENSIONS " << n << " " << n << " 1\n";       //must be 3d, so z dimension is 1
+        file << "ORIGIN 0.0 0.0 0.0\n";
+        file << "SPACING " << h << " " << h << " 1.0\n";
+        
+        // Data details
+        int num_points = n * n;
+        file << "POINT_DATA " << num_points << "\n";
+        file << "SCALARS solution double 1\n";
+        file << "LOOKUP_TABLE default\n";
+
+        for (auto i : solution)
+            file << i << std::endl;
+
+        file.close();
+        std::cout<<"Vtk file created successfully!"<<std::endl;
 
     }
 

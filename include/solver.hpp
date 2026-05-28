@@ -60,4 +60,7 @@ namespace jacobisolver{
         std::vector<std::vector<double>> solve();
 
     };
+
+    void export_vtk(unsigned int n, std::vector<double> solution, double h);
+
 }
