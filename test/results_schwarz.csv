@@ -1,0 +1,45 @@
+Grid: 16x16, MPI ranks: 1 Solver: Schwarz LU
+Jacobi converged in 2 iterations!
+16,1,0.00155159,0.0285648
+Grid: 16x16, MPI ranks: 2 Solver: Schwarz LU
+Jacobi converged in 27 iterations!
+16,2,0.00557196,0.0285671
+Grid: 16x16, MPI ranks: 4 Solver: Schwarz LU
+Jacobi converged in 30 iterations!
+16,4,0.0979979,0.0285609
+Grid: 32x32, MPI ranks: 1 Solver: Schwarz LU
+Jacobi converged in 2 iterations!
+32,1,0.00656495,0.00954989
+Grid: 32x32, MPI ranks: 2 Solver: Schwarz LU
+Jacobi converged in 51 iterations!
+32,2,0.015698,0.00955313
+Grid: 32x32, MPI ranks: 4 Solver: Schwarz LU
+Jacobi converged in 58 iterations!
+32,4,0.0523716,0.00954216
+Grid: 64x64, MPI ranks: 1 Solver: Schwarz LU
+Jacobi converged in 2 iterations!
+64,1,0.0347331,0.0032912
+Grid: 64x64, MPI ranks: 2 Solver: Schwarz LU
+Jacobi converged in 98 iterations!
+64,2,0.069421,0.00328753
+Grid: 64x64, MPI ranks: 4 Solver: Schwarz LU
+Jacobi converged in 112 iterations!
+64,4,0.0600976,0.00327445
+Grid: 128x128, MPI ranks: 1 Solver: Schwarz LU
+Jacobi converged in 2 iterations!
+128,1,0.208162,0.00114947
+Grid: 128x128, MPI ranks: 2 Solver: Schwarz LU
+Jacobi converged in 189 iterations!
+128,2,0.470147,0.00115331
+Grid: 128x128, MPI ranks: 4 Solver: Schwarz LU
+Jacobi converged in 214 iterations!
+128,4,0.220095,0.00110866
+Grid: 256x256, MPI ranks: 1 Solver: Schwarz LU
+Jacobi converged in 2 iterations!
+256,1,1.2616,0.000403972
+Grid: 256x256, MPI ranks: 2 Solver: Schwarz LU
+Jacobi converged in 364 iterations!
+256,2,5.11329,0.000400107
+Grid: 256x256, MPI ranks: 4 Solver: Schwarz LU
+Jacobi converged in 410 iterations!
+256,4,1.74764,0.000310306

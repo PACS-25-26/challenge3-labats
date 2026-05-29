@@ -1,0 +1,45 @@
+Grid: 16x16, MPI ranks: 1 Solver: Standard Jacobi
+Jacobi converged in 109 iterations!
+16,1,0.00859303,0.0284618
+Grid: 16x16, MPI ranks: 2 Solver: Standard Jacobi
+Jacobi converged in 105 iterations!
+16,2,0.0079714,0.0284169
+Grid: 16x16, MPI ranks: 4 Solver: Standard Jacobi
+Jacobi converged in 102 iterations!
+16,4,0.00240872,0.0283708
+Grid: 32x32, MPI ranks: 1 Solver: Standard Jacobi
+Jacobi converged in 420 iterations!
+32,1,0.0500938,0.00907829
+Grid: 32x32, MPI ranks: 2 Solver: Standard Jacobi
+Jacobi converged in 403 iterations!
+32,2,0.0276233,0.00887958
+Grid: 32x32, MPI ranks: 4 Solver: Standard Jacobi
+Jacobi converged in 388 iterations!
+32,4,0.0132178,0.00863576
+Grid: 64x64, MPI ranks: 1 Solver: Standard Jacobi
+Jacobi converged in 1525 iterations!
+64,1,0.655261,0.00129739
+Grid: 64x64, MPI ranks: 2 Solver: Standard Jacobi
+Jacobi converged in 1455 iterations!
+64,2,0.355141,0.000465489
+Grid: 64x64, MPI ranks: 4 Solver: Standard Jacobi
+Jacobi converged in 1389 iterations!
+64,4,0.0600555,0.000634505
+Grid: 128x128, MPI ranks: 1 Solver: Standard Jacobi
+Jacobi converged in 5340 iterations!
+128,1,3.82487,0.00700828
+Grid: 128x128, MPI ranks: 2 Solver: Standard Jacobi
+Jacobi converged in 5057 iterations!
+128,2,1.59529,0.0103863
+Grid: 128x128, MPI ranks: 4 Solver: Standard Jacobi
+Jacobi converged in 4780 iterations!
+128,4,0.508077,0.0150438
+Grid: 256x256, MPI ranks: 1 Solver: Standard Jacobi
+Jacobi converged in 18086 iterations!
+256,1,32.9496,0.0325294
+Grid: 256x256, MPI ranks: 2 Solver: Standard Jacobi
+Jacobi converged in 16945 iterations!
+256,2,23.5041,0.0461629
+Grid: 256x256, MPI ranks: 4 Solver: Standard Jacobi
+Jacobi converged in 15816 iterations!
+256,4,5.31298,0.0652006
