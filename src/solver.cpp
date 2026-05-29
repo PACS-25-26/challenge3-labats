@@ -46,19 +46,19 @@ namespace jacobisolver{
     void JacobiSolver::set_boundary_cond() noexcept{
         if (first_row == 0){        //only for the first rank
             #pragma omp parallel for
-            for (auto j = 0; j < n; ++j)
+            for (auto j = 0u; j < n; ++j)
                 grid(0, j) = bordercondition(grid.get_coordinate(0,j));
 
         }
         if (last_row == n - 1){     //only for the last rank
             #pragma omp parallel for
-            for (auto j = 0; j < n; ++j)
+            for (auto j = 0u; j < n; ++j)
                 grid(n-1, j) = bordercondition(grid.get_coordinate(n-1,j));
 
         }
         #pragma omp parallel for
         for (auto i = first_row; i <= last_row; ++i){
-            if (i != 0 && i != n-1){  // already set before
+            if (i != 0 && i != n-1){            // already set before
 
                 grid(i,0) = bordercondition(grid.get_coordinate(i,0));
                 grid(i, n-1) = bordercondition(grid.get_coordinate(i, n-1));
@@ -76,18 +76,18 @@ namespace jacobisolver{
         set_boundary_cond();
 
         int local_converged = 0, global_converged = 0;
-        unsigned int k = 0;
+        unsigned int k = 0;         //number of iterations
         double h = grid.geth();
-        double hsquared = h * h;
+        double hsquared = h * h;    //compute once to avoid doing it thousands of times
         std::vector<std::vector<double>> local_uk = grid.getu();
 
-        std::vector<double> followingrow(n, 0.);
-        std::vector<double> previousrow(n, 0.);
+        std::vector<double> followingrow(n, 0.);    //ghost row that will be sent by the following rank
+        std::vector<double> previousrow(n, 0.);     //ghost row that will be sent by the previous rank
 
         while (!global_converged && k <= maxit){
 
             k++;
-            local_converged = 0;
+            local_converged = 0;        //reset convergence, if not globally converged
             double difference = 0.;
 
             if (last_row != n-1 && first_row != 0){
@@ -107,9 +107,9 @@ namespace jacobisolver{
                             rank - 1, 0, previousrow.data(), n, MPI_DOUBLE, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             }
             
-            if (first_row != last_row){
+            if (first_row != last_row){   
                 #pragma omp parallel for reduction(+: difference)
-                for (auto j = 1; j < n-1; ++j){
+                for (auto j = 1u; j < n-1; ++j){
                     if (first_row != 0){
                     
                         //first row update using previousrow, assuming that first_row != last_row
@@ -136,9 +136,24 @@ namespace jacobisolver{
                     }
                 }
             }
+            else {           //handling the case where each rank sees only 1 row, meaning that we need both followingrow and previousrow
+                if (first_row != 0 && last_row != n-1){
+                    #pragma omp parallel for reduction(+:difference)
+                    for (auto j = 1u; j < n-1; ++j){
+
+                        double sum = 0.;
+                        sum += previousrow[j] + followingrow[j] + local_uk[0][j-1] + local_uk[0][j+1];   //if i used grid I would do a mix of new and old grid elements; uk has only the old ones
+                        Point p = {first_row * h, j * h};
+                        sum += hsquared * f(p);
+                        grid(first_row, j) = 0.25 * sum;
+                        difference += (grid(first_row, j) - local_uk[0][j])*(grid(first_row, j) - local_uk[0][j]);
+
+                }
+                }
+            }
             #pragma omp parallel for reduction(+:difference)
-            for (auto i = first_row + 1; i < last_row; ++i){
-               for (auto j = 1; j < n-1; ++j){
+            for (auto i = first_row + 1; i < last_row; ++i){        //handling all rows "in between"
+               for (auto j = 1u; j < n-1; ++j){
 
                     double sum = 0.;
                     //again, all indices of local_uk must be shifted by a firstrow since they start from 0
@@ -151,27 +166,11 @@ namespace jacobisolver{
                 }
             }
 
-            if (first_row == last_row){
-                if (first_row != 0 && last_row != n-1){
-                    #pragma omp parallel for reduction(+:difference)
-                    for (auto j = 1; j < n-1; ++j){
-
-                        double sum = 0.;
-                        sum += previousrow[j] + followingrow[j] + local_uk[0][j-1] + local_uk[0][j+1];   //if i used grid I would do a mix of new and old grid elements; uk has only the old ones
-                        Point p = {first_row * h, j * h};
-                        sum += hsquared * f(p);
-                        grid(first_row, j) = 0.25 * sum;
-                        difference += (grid(first_row, j) - local_uk[0][j])*(grid(first_row, j) - local_uk[0][j]);
-
-                }
-                }
-            }
-
             double increment = std::sqrt(h * difference);
             if (increment < tolerance)
                 local_converged = 1;
 
-
+            //to chech total convergence, I need that locally_converged == 1 for every rank
             MPI_Allreduce(&local_converged, &global_converged, 1, MPI_INT, MPI_LAND, MPI_COMM_WORLD);
 
             if (global_converged && rank == 0)
@@ -207,12 +206,13 @@ namespace jacobisolver{
         //the jacobi algebric formulation is -(u(i-1,j) + u(i+1,j) + u(i,j-1) + u(i,j+1) - 4*u(i,j)) / h^2 = f(i,j)
         //when k = n*i + j, it becomes 4*u_k - u_(k-1) - u_(k+1) - u_(k-n) - u_(k+n) = h^2 * f_k
         //so the matrix A is sparse and each row has only 5 entries
+        //To initialize a sparse matrix in Eigen, the best way is a vector of triplets
         std::vector<Eigen::Triplet<double>> triplets;
         Eigen::SparseMatrix<double> A(local_size*n, local_size*n);  //the first and last column are fixed (Dirichlet)
         Eigen::VectorXd f_local(local_size*n);      //forcing term
         
-        for (auto i = 1; i < local_size-1; ++i){    //first and last row require more attention
-            for (auto j = 1; j < n-1; ++j){
+        for (auto i = 1u; i < local_size-1; ++i){    //first and last row require more attention
+            for (auto j = 1u; j < n-1; ++j){
 
                 auto k = n * i + j;                             //we are on row k of the matrix, concering u_k
                 triplets.push_back({k, k, 4});                  //4*u_k
@@ -225,7 +225,7 @@ namespace jacobisolver{
         }
         if (first_row != 0){        //the equations for the elements on the first row become 4*u_k - u_(k-1) - u_(k+1) - u_(k+n) = h^2 * f_k + u_(k-n)
                                     //where u_(k-n) is known and comes from the previousrow, so it is not in local_uk
-            for (auto j = 1; j < n-1; ++j){     //i = 0, so k = j
+            for (auto j = 1u; j < n-1; ++j){     //i = 0, so k = j
 
                 triplets.push_back({j, j, 4});                  //4*u_k
                 triplets.push_back({j, j-1, -1});               //-u_(k-1)
@@ -235,7 +235,7 @@ namespace jacobisolver{
             }
         }
         else{       //in the first row, all equations are u_k = f(k), where f(k) is the border condition
-            for (auto j = 1; j < n-1; ++j){
+            for (auto j = 1u; j < n-1; ++j){
 
                 triplets.push_back({j, j, 1});
                 f_local(j) = local_uk[0][j];
@@ -244,7 +244,7 @@ namespace jacobisolver{
         }
         if (last_row != n-1){       //the equations for the last row become 4*u_k - u_(k-1) - u_(k+1) - u_(k-n) = h^2 * f_k + u_(k+n)
                                     //where u_(k+n) is known and comes from the followingrow, so it is not in local_uk
-            for (auto j = 1; j < n-1; ++j){     //i = local_size - 1
+            for (auto j = 1u; j < n-1; ++j){     //i = local_size - 1
 
                 auto k = n * (local_size - 1) + j;
                 triplets.push_back({k, k, 4});                  //4*u_k
@@ -255,7 +255,7 @@ namespace jacobisolver{
             }
         }
         else{       //in the last row, all equations are u_k = f(k), where f(k) is the border condition
-            for (auto j = 1; j < n-1; ++j){
+            for (auto j = 1u; j < n-1; ++j){
 
                 auto k = n * (local_size - 1) + j;
                 triplets.push_back({k, k, 1});
@@ -264,7 +264,7 @@ namespace jacobisolver{
             }
         }
 
-        for (auto i = 0; i < local_size; ++i){  //the border conditions must not change, so for j = 0, n-1 we must have 
+        for (auto i = 0u; i < local_size; ++i){  //the border conditions must not change, so for j = 0, n-1 we must have 
                                                 //the identity row: u_k = f_bc. I also fix f_k = f_bc
 
             auto k0 = n * i;
@@ -277,6 +277,8 @@ namespace jacobisolver{
         }
 
         A.setFromTriplets(triplets.begin(), triplets.end());
+        triplets.clear(); 
+        triplets.shrink_to_fit();
 
         Eigen::SparseLU<Eigen::SparseMatrix<double>> lu_solver;         //Eigen LU computation. Only needed once for A, so out of while
         lu_solver.compute(A);
@@ -307,10 +309,10 @@ namespace jacobisolver{
                             rank - 1, 0, previousrow.data(), n, MPI_DOUBLE, rank - 1, 0, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
             }
 
-            //Assembly of f_local
+            //Assembly of f_local. Changes at every iteration, except on the border
             #pragma omp parallel for
-            for (auto i = 1; i < local_size-1; ++i){    //first and last row require more attention
-                for (auto j = 1; j < n-1; ++j){
+            for (auto i = 1u; i < local_size-1; ++i){    //first and last row require more attention
+                for (auto j = 1u; j < n-1; ++j){
 
                     auto k = n * i + j;                             //we are on row k of the matrix, concering u_k
                     Point p = {(first_row + i)*h, j*h};
@@ -321,7 +323,7 @@ namespace jacobisolver{
             if (first_row != 0){        //the equations for the elements on the first row become 4*u_k - u_(k-1) - u_(k+1) - u_(k+n) = h^2 * f_k + u_(k-n)
                                         //where u_(k-n) is known and comes from the previousrow, so it is not in local_uk
                 #pragma omp parallel for
-                for (auto j = 1; j < n-1; ++j){    //i = 0, so k = j
+                for (auto j = 1u; j < n-1; ++j){    //i = 0, so k = j
                     Point p = {first_row * h, j * h};                           
                     f_local(j) = hsquared * f(p) + previousrow[j];
                 }
@@ -330,7 +332,7 @@ namespace jacobisolver{
             if (last_row != n-1){       //the equations for the last row become 4*u_k - u_(k-1) - u_(k+1) - u_(k-n) = h^2 * f_k + u_(k+n)
                                         //where u_(k+n) is known and comes from the followingrow, so it is not in local_uk
                 #pragma omp parallel for
-                for (auto j = 1; j < n-1; ++j){     //i = local_size - 1
+                for (auto j = 1u; j < n-1; ++j){     //i = local_size - 1
 
                     auto k = n * (local_size - 1) + j;   
                     Point p = {last_row * h, j * h};                            
@@ -342,13 +344,13 @@ namespace jacobisolver{
             Eigen::VectorXd u_local = lu_solver.solve(f_local);
 
             #pragma omp parallel for
-            for (auto i = 0; i < local_size; ++i)
-                for (auto j = 0; j < n; ++j)
+            for (auto i = 0u; i < local_size; ++i)
+                for (auto j = 0u; j < n; ++j)
                     grid(first_row + i, j) = u_local(i*n + j);      //updating U with u_local
 
             #pragma omp parallel for reduction(+:difference)
-            for (auto i = 0; i < local_size; ++i)
-                for (auto j = 0; j < n; ++j)
+            for (auto i = 0u; i < local_size; ++i)
+                for (auto j = 0u; j < n; ++j)
                     difference += (u_local(i*n + j) - local_uk[i][j]) * (u_local(i*n + j) - local_uk[i][j]);
 
             double increment = std::sqrt(h * difference);

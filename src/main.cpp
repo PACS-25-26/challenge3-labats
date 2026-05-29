@@ -11,7 +11,7 @@ int main(int argc, char* argv[]) {
 
     try{
 
-        if (argc > 4){
+        if (argc > 4){      //Exception handling
             if (rank == 0) 
                 std::cerr << "Too many arguments in input. Enter only: n, solver_type, bc." << std::endl;
             MPI_Finalize();
@@ -32,7 +32,7 @@ int main(int argc, char* argv[]) {
         }
         double h = 1./(n-1);
 
-        if (size > n){
+        if (size > n){      //Exception handling
             if (rank == 0) 
                 std::cerr << "Too many MPI ranks for grid size." << n << std::endl;
             MPI_Finalize();
@@ -72,7 +72,7 @@ int main(int argc, char* argv[]) {
         std::function<double(const Point&)> u_exact;
 
         if (bc_type == 0) {        //bc is default 0
-            bc = [](const Point& p){ return 0.0; };
+            bc = [](const Point&){ return 0.0; };
             forcing = [](const Point& p) {
                 return 8.0 * M_PI * M_PI * std::sin(2.0 * M_PI * p[0]) * std::sin(2.0 * M_PI * p[1]);
             };
@@ -82,7 +82,7 @@ int main(int argc, char* argv[]) {
         } 
         else {        //u = e^x * cos(y), forcing = 0, bc not 0
             bc = [](const Point& p) { return std::exp(p[0]) * std::cos(p[1]); };
-            forcing = [](const Point& p) { return 0.0; };
+            forcing = [](const Point&) { return 0.0; };
             u_exact = [](const Point& p){ return std::exp(p[0]) * std::cos(p[1]); };
         }
 
@@ -107,7 +107,7 @@ int main(int argc, char* argv[]) {
         double l2norm = 0, l2final = 0;
         #pragma omp parallel for reduction(+: l2norm)
         for (auto i = rowfirst; i <= rowfinal; ++i){
-            for (auto j = 0; j < n; ++j){
+            for (auto j = 0u; j < n; ++j){
 
                 Point coordinate = {i*h, j*h};
                 l2norm += (solution[i - rowfirst][j] - u_exact(coordinate))*(solution[i - rowfirst][j] - u_exact(coordinate));
@@ -117,7 +117,7 @@ int main(int argc, char* argv[]) {
 
         MPI_Reduce(&l2norm, &l2final, 1, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
 
-        std::vector<double> finalgrid;      //MPI works only with contiguous memory, so I can't use vector<vector> like before
+        std::vector<double> finalgrid;      //MPI works mainly with contiguous memory, so I prefer to use a "flattened" std::vector<double>
 
         std::vector<double> solution_flat(local_size * n);
         #pragma omp parallel for
