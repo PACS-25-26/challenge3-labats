@@ -1,0 +1,29 @@
+#!/bin/bash
+#PBS -N jacobi
+#PBS -q cpu
+#PBS -l select=1:ncpus=4:mpiprocs=4
+#PBS -l walltime=00:45:00
+#PBS -j oe
+
+cd $PBS_O_WORKDIR
+
+CSV_JACOBI="results_jacobi.csv"
+CSV_SCHWARZ="results_schwarz.csv"
+
+N_VALUES=(16 32 64 128 256)
+RANKS=(1 2 4)
+
+#standard jacobi trials
+for n in "${N_VALUES[@]}"; do
+    for r in "${RANKS[@]}"; do
+        mpirun -np $r ../jacobi $n 0 0 >> $CSV_JACOBI
+    done
+done
+
+#schwarz jacobi trials
+for n in "${N_VALUES[@]}"; do
+    for r in "${RANKS[@]}"; do
+        mpirun -np $r ../jacobi $n 1 0 >> $CSV_SCHWARZ
+    done
+done
+
