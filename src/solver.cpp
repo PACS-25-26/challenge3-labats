@@ -211,56 +211,88 @@ namespace jacobisolver{
         Eigen::SparseMatrix<double> A(local_size*n, local_size*n);  //the first and last column are fixed (Dirichlet)
         Eigen::VectorXd f_local(local_size*n);      //forcing term
         
-        for (auto i = 1u; i < local_size-1; ++i){    //first and last row require more attention
-            for (auto j = 1u; j < n-1; ++j){
+        if (local_size != 1){        //when each rank does not see only one row
+            for (auto i = 1u; i < local_size-1; ++i){    //first and last row require more attention
+                for (auto j = 1u; j < n-1; ++j){
 
-                auto k = n * i + j;                             //we are on row k of the matrix, concering u_k
-                triplets.push_back({k, k, 4});                  //4*u_k
-                triplets.push_back({k, k-1, -1});               //-u_(k-1)
-                triplets.push_back({k, k+1, -1});               //-u_(k+1)
-                triplets.push_back({k, k-n, -1});               //-u_(k-n)
-                triplets.push_back({k, k+n, -1});               //-u_(k+n)
+                    auto k = n * i + j;                             //we are on row k of the matrix, concering u_k
+                    triplets.push_back({k, k, 4});                  //4*u_k
+                    triplets.push_back({k, k-1, -1});               //-u_(k-1)
+                    triplets.push_back({k, k+1, -1});               //-u_(k+1)
+                    triplets.push_back({k, k-n, -1});               //-u_(k-n)
+                    triplets.push_back({k, k+n, -1});               //-u_(k+n)
 
+                }
             }
-        }
-        if (first_row != 0){        //the equations for the elements on the first row become 4*u_k - u_(k-1) - u_(k+1) - u_(k+n) = h^2 * f_k + u_(k-n)
-                                    //where u_(k-n) is known and comes from the previousrow, so it is not in local_uk
-            for (auto j = 1u; j < n-1; ++j){     //i = 0, so k = j
+            if (first_row != 0){        //the equations for the elements on the first row become 4*u_k - u_(k-1) - u_(k+1) - u_(k+n) = h^2 * f_k + u_(k-n)
+                                        //where u_(k-n) is known and comes from the previousrow, so it is not in local_uk
+                for (auto j = 1u; j < n-1; ++j){     //i = 0, so k = j
 
-                triplets.push_back({j, j, 4});                  //4*u_k
-                triplets.push_back({j, j-1, -1});               //-u_(k-1)
-                triplets.push_back({j, j+1, -1});               //-u_(k+1)
-                triplets.push_back({j, j+n, -1});               //-u_(k+n)
+                    triplets.push_back({j, j, 4});                  //4*u_k
+                    triplets.push_back({j, j-1, -1});               //-u_(k-1)
+                    triplets.push_back({j, j+1, -1});               //-u_(k+1)
+                    triplets.push_back({j, j+n, -1});               //-u_(k+n)
 
+                }
             }
-        }
-        else{       //in the first row, all equations are u_k = f(k), where f(k) is the border condition
-            for (auto j = 1u; j < n-1; ++j){
+            else{       //in the first row, all equations are u_k = f(k), where f(k) is the border condition
+                for (auto j = 1u; j < n-1; ++j){
 
-                triplets.push_back({j, j, 1});
-                f_local(j) = local_uk[0][j];
+                    triplets.push_back({j, j, 1});
+                    f_local(j) = local_uk[0][j];
 
+                }
             }
-        }
-        if (last_row != n-1){       //the equations for the last row become 4*u_k - u_(k-1) - u_(k+1) - u_(k-n) = h^2 * f_k + u_(k+n)
-                                    //where u_(k+n) is known and comes from the followingrow, so it is not in local_uk
-            for (auto j = 1u; j < n-1; ++j){     //i = local_size - 1
+            if (last_row != n-1){       //the equations for the last row become 4*u_k - u_(k-1) - u_(k+1) - u_(k-n) = h^2 * f_k + u_(k+n)
+                                        //where u_(k+n) is known and comes from the followingrow, so it is not in local_uk
+                for (auto j = 1u; j < n-1; ++j){     //i = local_size - 1
 
-                auto k = n * (local_size - 1) + j;
-                triplets.push_back({k, k, 4});                  //4*u_k
-                triplets.push_back({k, k-1, -1});               //-u_(k-1)
-                triplets.push_back({k, k+1, -1});               //-u_(k+1)
-                triplets.push_back({k, k-n, -1});               //-u_(k-n)
+                    auto k = n * (local_size - 1) + j;
+                    triplets.push_back({k, k, 4});                  //4*u_k
+                    triplets.push_back({k, k-1, -1});               //-u_(k-1)
+                    triplets.push_back({k, k+1, -1});               //-u_(k+1)
+                    triplets.push_back({k, k-n, -1});               //-u_(k-n)
 
+                }
             }
-        }
         else{       //in the last row, all equations are u_k = f(k), where f(k) is the border condition
-            for (auto j = 1u; j < n-1; ++j){
+                for (auto j = 1u; j < n-1; ++j){
 
-                auto k = n * (local_size - 1) + j;
-                triplets.push_back({k, k, 1});
-                f_local(k) = local_uk[local_size - 1][j];
+                    auto k = n * (local_size - 1) + j;
+                    triplets.push_back({k, k, 1});
+                    f_local(k) = local_uk[local_size - 1][j];
 
+                }
+            }
+        }
+        else{   //when local_size == 1, the equations become 4*u_k - u_(k-1) - u_(k+1) = h^2 * f_k + u_(k+n) + u_(k-n)
+                //where both u_(k-n) and u_(k+n) are known
+
+            if (first_row == 0){
+                for (auto j = 1u; j < n-1; ++j){
+
+                    triplets.push_back({j, j, 1});
+                    f_local(j) = local_uk[0][j];
+
+                }
+            }
+            else if (last_row == n-1){
+                for (auto j = 1u; j < n-1; ++j){
+
+                    auto k = n * (local_size - 1) + j;
+                    triplets.push_back({k, k, 1});
+                    f_local(k) = local_uk[local_size - 1][j];
+
+                }
+            }
+            else{
+                for (auto j = 1u; j < n-1; ++j){     //i = 0, so k = j
+
+                    triplets.push_back({j, j, 4});                  //4*u_k
+                    triplets.push_back({j, j-1, -1});               //-u_(k-1)
+                    triplets.push_back({j, j+1, -1});               //-u_(k+1)
+
+            }
             }
         }
 
@@ -310,35 +342,48 @@ namespace jacobisolver{
             }
 
             //Assembly of f_local. Changes at every iteration, except on the border
-            #pragma omp parallel for
-            for (auto i = 1u; i < local_size-1; ++i){    //first and last row require more attention
-                for (auto j = 1u; j < n-1; ++j){
+            if (local_size != 1){
+                #pragma omp parallel for
+                for (auto i = 1u; i < local_size-1; ++i){    //first and last row require more attention
+                    for (auto j = 1u; j < n-1; ++j){
 
-                    auto k = n * i + j;                             //we are on row k of the matrix, concering u_k
-                    Point p = {(first_row + i)*h, j*h};
-                    f_local(k) = hsquared * f(p);
+                        auto k = n * i + j;                             //we are on row k of the matrix, concering u_k
+                        Point p = {(first_row + i)*h, j*h};
+                        f_local(k) = hsquared * f(p);
 
+                    }
+                }
+                if (first_row != 0){        //the equations for the elements on the first row become 4*u_k - u_(k-1) - u_(k+1) - u_(k+n) = h^2 * f_k + u_(k-n)
+                                            //where u_(k-n) is known and comes from the previousrow, so it is not in local_uk
+                    #pragma omp parallel for
+                    for (auto j = 1u; j < n-1; ++j){    //i = 0, so k = j
+                        Point p = {first_row * h, j * h};                           
+                        f_local(j) = hsquared * f(p) + previousrow[j];
+                    }
+
+                }
+                if (last_row != n-1){       //the equations for the last row become 4*u_k - u_(k-1) - u_(k+1) - u_(k-n) = h^2 * f_k + u_(k+n)
+                                            //where u_(k+n) is known and comes from the followingrow, so it is not in local_uk
+                    #pragma omp parallel for
+                    for (auto j = 1u; j < n-1; ++j){     //i = local_size - 1
+
+                        auto k = n * (local_size - 1) + j;   
+                        Point p = {last_row * h, j * h};                            
+                        f_local(k) = hsquared * f(p) + followingrow[j];
+
+                    }
                 }
             }
-            if (first_row != 0){        //the equations for the elements on the first row become 4*u_k - u_(k-1) - u_(k+1) - u_(k+n) = h^2 * f_k + u_(k-n)
-                                        //where u_(k-n) is known and comes from the previousrow, so it is not in local_uk
-                #pragma omp parallel for
-                for (auto j = 1u; j < n-1; ++j){    //i = 0, so k = j
-                    Point p = {first_row * h, j * h};                           
-                    f_local(j) = hsquared * f(p) + previousrow[j];
+            else{   //when local_size == 1
+                if (first_row != 0 && last_row != n-1) {
+                    for (auto j = 1u; j < n-1; ++j) {
+
+                        Point p = {first_row * h, j * h};
+                        f_local(j) = hsquared * f(p) + previousrow[j] + followingrow[j];
+
+                    }
                 }
-
-            }
-            if (last_row != n-1){       //the equations for the last row become 4*u_k - u_(k-1) - u_(k+1) - u_(k-n) = h^2 * f_k + u_(k+n)
-                                        //where u_(k+n) is known and comes from the followingrow, so it is not in local_uk
-                #pragma omp parallel for
-                for (auto j = 1u; j < n-1; ++j){     //i = local_size - 1
-
-                    auto k = n * (local_size - 1) + j;   
-                    Point p = {last_row * h, j * h};                            
-                    f_local(k) = hsquared * f(p) + followingrow[j];
-
-                }
+                //If first_row == 0 or last_row == n-1 we do not update f, since we are on the border
             }
 
             Eigen::VectorXd u_local = lu_solver.solve(f_local);

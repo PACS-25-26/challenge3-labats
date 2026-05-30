@@ -27,7 +27,7 @@ int main(int argc, char* argv[]) {
         if (argc > 2) {
             solver_type = std::atoi(argv[2]);
         }
-        if (argc > 2) {
+        if (argc > 3) {
             bc_type = std::atoi(argv[3]);
         }
         double h = 1./(n-1);

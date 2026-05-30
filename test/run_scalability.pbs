@@ -1,5 +1,5 @@
 #!/bin/bash
-#PBS -N jacobi_full_bench
+#PBS -N jacobi
 #PBS -q cpu
 #PBS -l select=1:ncpus=4:mpiprocs=4
 #PBS -l walltime=00:45:00

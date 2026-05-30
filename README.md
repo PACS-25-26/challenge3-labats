@@ -50,7 +50,7 @@ In `src`, `solver.cpp` implements all the methods of the classes hadling MPI com
 The directory `test` contains the PBS script `run_scalability.pbs` required to submit the benchmark in the HPC cluster that was used for testing and execution. The two output CSV files will be generated here, one for each numerical solving method.
 In `test/data`, the Python script `plot_results.py` is used to parse the CSV files and plot the scalability and L2 error graphs.
 
-## Cluster Execution & Post-Processing
+## Cluster Execution and Post-Processing
 To evaluate the performance of both algorithms, one can submit the benchmark job to the cluster's queue:
 ```bash
 cd test
@@ -62,3 +62,6 @@ cd data
 python plot_results.py
 ```
 This will automatically generate the `scalability_<solver>.png` and `error_L2_<solver>.png charts`.
+
+## An important note
+As the Challenge text explicitly required, each MPI rank evaluates the stopping criterion independently on its local subdomain. Global convergence is then declared when all ranks satisfy their local condition simultaneously, via an `MPI_Allreduce` with a logical AND operation. As a consequence, the number of iterations required to reach convergence may vary slightly depending on the number of ranks, since the local norms are checked independently rather than being aggregated into a single global norm before comparison with the tolerance.
